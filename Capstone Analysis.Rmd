@@ -1,0 +1,107 @@
+---
+title: "Capstone Analysis"
+output: html_document
+date: "2023-11-07"
+---
+
+```{r}
+library(eeptools)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(grid)
+library(gridExtra)
+library(stringr)
+```
+
+
+```{r}
+va <- read.csv("/Users/zoeschopick/VA Counties.csv")
+names(va)  <- c("County", "HS_or_higher", "Bach_or_higher", "Population", "Black", "Hispanic/Latino", "White")
+
+va2 <- va[1:132,]
+va2$County <- tolower(va2$County)
+```
+
+```{r}
+va_graduates <- read.csv("/Users/zoeschopick/va_grad_rates2.csv")
+va_graduates <- va_graduates %>% select(-X)
+```
+
+```{r}
+va_graduates2 <- va_graduates %>% select(-City, -Status)
+```
+
+```{r}
+va_grades <- read.csv("/Users/zoeschopick/va_grades_schools.csv")
+names(va_grades) <- c("School", "State", "School_ID","Ninth", "Tenth", "Eleventh", "Twelfth", "Thirteenth","ungraded", "Adult" ,"total")
+va_grades <- va_grades %>% select(-ungraded, -Adult)
+va_grades$School <- tolower(va_grades$School)
+```
+
+```{r}
+va_grades2 <- va_grades %>% filter(Ninth != "None" )
+va_grades2 <- va_grades2 %>% select(-State, -total, -Thirteenth)
+```
+
+```{r}
+va_grad_rates3 <- merge(x = va_graduates2, y = va_grades2, by.x = c("School", "ID"), by.y = c("School", "School_ID"), all.x = TRUE)
+names(va_grad_rates3) <- c("School", "ID", "County", "District", "Locale", "Title_1", "Students", "S_T_Ratio", "Type", "Free_reduced_lunch", "Graduates", "Two_year_college", "Four_year_college", "Nine", "Ten", "Eleven", "Twelve")
+```
+
+```{r}
+va_grad_rates3$Nine <- as.numeric(va_grad_rates3$Nine)
+va_grad_rates3$Ten <- as.numeric(va_grad_rates3$Ten)
+va_grad_rates3$Eleven <- as.numeric(va_grad_rates3$Eleven)
+va_grad_rates3$Twelve <- as.numeric(va_grad_rates3$Twelve)
+```
+```{r}
+va_grad_rates4 <- va_grad_rates3 %>% mutate(County = ifelse(grepl("city", County)== TRUE, County, word(County, 1) ))
+va_grad_rates4$County <- tolower(va_grad_rates4$County)
+```
+
+```{r}
+va_final_data <- merge(x = va_grad_rates4, y = va2, by = "County", all.x = TRUE)
+
+va_final_data2 <- va_final_data %>% mutate(GradRate2 = (Graduates/Students)*100)
+```
+
+```{r}
+va_final_data3 <- va_final_data2 %>% select(-ID, -District)
+```
+
+```{r}
+va_final_data4 <- va_final_data3 %>% mutate(Title_1 = ifelse(Title_1 == "No", 0, ifelse(Title_1 == "Yes", 1, Title_1))) %>% select(-Type) %>% mutate(Free_reduced_lunch = (Free_reduced_lunch/Students)*100)
+```
+
+```{r}
+va_final_data5 <- va_final_data4 %>% mutate(Locale = ifelse(Locale == "Rural: Remote", 12, ifelse(Locale == "Rural: Distant", 11, ifelse(Locale == "Rural: Fringe", 10, ifelse(Locale == "Town: Remote", 9, ifelse(Locale == "Town: Distant", 8, ifelse(Locale == "Town: Fringe", 7, ifelse(Locale == "Suburb: Small", 6, ifelse(Locale == "Suburb: Midsize", 5, ifelse(Locale == "Suburb: Large", 4, ifelse(Locale == "City: Small", 3, ifelse(Locale == "City: Midsize", 2, ifelse(Locale == "City: Large", 1, Locale)))))))))))))
+va_final_data5$Locale <- as.numeric(va_final_data5$Locale)
+va_final_data5$Title_1 <- as.numeric(va_final_data5$Title_1)
+
+```
+
+```{r}
+data_for_analysis <- va_final_data5 %>% select(-County, -School, -Graduates) %>% filter(GradRate2 < 100)
+
+```
+
+```{r}
+set.seed(1)
+sample <- sample(c(TRUE, FALSE), nrow(data_for_analysis), replace=TRUE, prob=c(0.7,0.3))
+train_data <- data_for_analysis[sample, ]
+test_data <- data_for_analysis[!sample, ]
+```
+
+```{r}
+grad_rate_lm <- lm(GradRate2 ~ Title_1 + S_T_Ratio +Bach_or_higher, data = train_data)
+summary(grad_rate_lm)
+```
+```{r}
+s_t_ratio_lm <- lm(S_T_Ratio ~ Free_reduced_lunch + White, data = train_data)
+summary(s_t_ratio_lm)
+```
+
+
+
